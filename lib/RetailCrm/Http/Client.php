@@ -14,6 +14,7 @@
 
 namespace RetailCrm\Http;
 
+use Psr\Log\LoggerInterface;
 use RetailCrm\Exception\CurlException;
 use RetailCrm\Exception\InvalidJsonException;
 use RetailCrm\Exception\LimitException;
@@ -37,6 +38,11 @@ class Client
 
     protected $url;
     protected $defaultParameters;
+
+    /**
+     * @var LoggerInterface|null $logger
+     */
+    protected $logger;
 
     /**
      * Client constructor.
@@ -96,6 +102,8 @@ class Client
 
         $url = $fullPath ? $path : $this->url . $path;
 
+        $this->logRequestParams($url, $method, $parameters);
+
         if (self::METHOD_GET === $method && count($parameters)) {
             $url .= '?' . http_build_query($parameters, '', '&');
         }
@@ -118,6 +126,8 @@ class Client
         $responseBody = curl_exec($curlHandler);
         $statusCode = curl_getinfo($curlHandler, CURLINFO_HTTP_CODE);
 
+        $this->logResponse($responseBody, $statusCode);
+
         if ($statusCode == 503) {
             throw new LimitException("Service temporary unavalable");
         }
@@ -132,5 +142,39 @@ class Client
         }
 
         return new ApiResponse($statusCode, $responseBody);
+    }
+
+    /**
+     * @param LoggerInterface|null $logger
+     */
+    public function setLogger($logger)
+    {
+        $this->logger = $logger;
+    }
+
+    private function logRequestParams($url, $method, $params)
+    {
+        if (null === $this->logger) {
+            return;
+        }
+
+        $message = 'Send request: ' . $method . ' ' . $url;
+
+        if (!empty($params)) {
+            $message .= ' with params: ' . json_encode($params);
+        }
+
+        $this->logger->info($message);
+    }
+
+    private function logResponse($responseBody, $statusCode)
+    {
+        if (null === $this->logger) {
+            return;
+        }
+
+        $message = 'Response with code ' . $statusCode . ' received with body: ' . $responseBody;
+
+        $this->logger->info($message);
     }
 }
